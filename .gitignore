@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 .npm-cache/
 .DS_Store
+CLAUDE.md
+deploy.yml.disabled
