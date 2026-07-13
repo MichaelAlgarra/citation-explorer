@@ -73,6 +73,17 @@ function simplifyWork(w) {
   };
 }
 
+function simplifyTopic(t) {
+  return {
+    id: shortId(t.id || ""),
+    name: t.display_name,
+    works_count: t.works_count || 0,
+    // OpenAlex hierarchy: domain > field > subfield > topic.
+    field: t.field?.display_name || null,
+    subfield: t.subfield?.display_name || null,
+  };
+}
+
 function simplifyAuthor(a) {
   const insts = a.last_known_institutions || [];
   return {
@@ -126,6 +137,67 @@ async function computeRelated(id, limit = 20) {
   return { count: ranked.length, results: ranked };
 }
 
+// Most frequent co-authors: tally co-authors across the author's own works.
+async function coauthors(id, limit = 15) {
+  const aid = shortId(id);
+  const data = await getJSON("/works", {
+    filter: `author.id:${aid}`,
+    per_page: 100,
+    select: "id,authorships",
+  });
+  const tally = new Map();
+  for (const w of data.results || []) {
+    for (const a of w.authorships || []) {
+      const cid = shortId(a.author?.id);
+      if (!cid || cid === aid) continue;
+      const cur = tally.get(cid) || { id: cid, name: a.author.display_name, count: 0 };
+      cur.count += 1;
+      tally.set(cid, cur);
+    }
+  }
+  const results = [...tally.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+  return { count: results.length, results };
+}
+
+// Who cites this author most: sample their top works, collect the authors of
+// papers citing those works, and tally. A rough "who's paying attention" map.
+async function topCiters(id, limit = 15) {
+  const aid = shortId(id);
+  const top = await getJSON("/works", {
+    filter: `author.id:${aid}`,
+    sort: "cited_by_count:desc",
+    per_page: 10,
+    select: "id",
+  });
+  const lists = await Promise.all(
+    (top.results || []).map((w) =>
+      getJSON("/works", {
+        filter: `cites:${shortId(w.id)}`,
+        per_page: 50,
+        select: "authorships",
+      }).catch(() => ({ results: [] }))
+    )
+  );
+  const tally = new Map();
+  for (const citing of lists) {
+    for (const c of citing.results || []) {
+      for (const a of c.authorships || []) {
+        const cid = shortId(a.author?.id);
+        if (!cid || cid === aid) continue;
+        const cur = tally.get(cid) || { id: cid, name: a.author.display_name, count: 0 };
+        cur.count += 1;
+        tally.set(cid, cur);
+      }
+    }
+  }
+  const results = [...tally.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+  return { count: results.length, results };
+}
+
 export const api = {
   search: async (q, limit = 10) => ({
     results: (await listWorks({ search: q, per_page: limit })).results,
@@ -137,6 +209,12 @@ export const api = {
       select: AUTHOR_FIELDS,
     });
     return { results: (data.results || []).map(simplifyAuthor) };
+  },
+  author: async (id) => {
+    const data = await getJSON(`/authors/${shortId(id)}`, {
+      select: AUTHOR_FIELDS,
+    });
+    return simplifyAuthor(data);
   },
   authorWorks: (id, perPage = 50) =>
     listWorks({
@@ -157,4 +235,20 @@ export const api = {
       per_page: perPage,
     }),
   related: (id, limit = 20) => computeRelated(shortId(id), limit),
+  coauthors: (id, limit = 15) => coauthors(id, limit),
+  topCiters: (id, limit = 15) => topCiters(id, limit),
+  searchTopics: async (q, limit = 10) => {
+    const data = await getJSON("/topics", {
+      search: q,
+      per_page: limit,
+      select: "id,display_name,works_count,field,subfield",
+    });
+    return { results: (data.results || []).map(simplifyTopic) };
+  },
+  topicWorks: (id, perPage = 50) =>
+    listWorks({
+      filter: `topics.id:${shortId(id)}`,
+      sort: "cited_by_count:desc",
+      per_page: perPage,
+    }),
 };

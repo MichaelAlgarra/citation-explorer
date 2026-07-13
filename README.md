@@ -8,9 +8,13 @@ graph. Search for any paper and instantly see:
 - **Related** — papers most often *co-cited* alongside it (a lightweight
   topical-relatedness signal computed on the fly)
 
-You can also search by **author** — browse everything a researcher has
-published (most-cited first), then click any of their papers to jump into its
-citation graph.
+Search by **author** to browse everything a researcher has published (most
+cited first), their most frequent **co-authors**, and the people who **cite
+them most** — click any collaborator or citer to pivot to that author. Useful
+for mapping a field or scouting a prospective collaborator.
+
+Search by **topic** to see the most-cited papers in any OpenAlex category
+(e.g. "drug metabolism", "molecular docking").
 
 Click any result to pivot and make it the new focus, so you can walk the
 citation graph in any direction. Recent papers are kept as breadcrumbs.
@@ -70,7 +74,12 @@ Your site lands at `https://<username>.github.io/<repo>/`.
 | --- | --- |
 | `search(q)` | `/works?search=` |
 | `searchAuthors(q)` | `/authors?search=` |
+| `searchTopics(q)` | `/topics?search=` |
+| `author(id)` | `/authors/{id}` |
 | `authorWorks(id)` | `/works?filter=author.id:` |
+| `coauthors(id)` | author's works → tally co-authors |
+| `topCiters(id)` | author's top works → authors of citing papers, counted |
+| `topicWorks(id)` | `/works?filter=topics.id:` (most cited) |
 | `work(id)` | `/works/{id}` (incl. abstract) |
 | `references(id)` | `/works?filter=cited_by:{id}` |
 | `citations(id)` | `/works?filter=cites:{id}` |

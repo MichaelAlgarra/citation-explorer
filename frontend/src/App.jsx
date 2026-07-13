@@ -38,8 +38,34 @@ function PaperCard({ paper, onPick, score }) {
   );
 }
 
-// Search box with a Papers/Authors mode toggle and debounced autocomplete.
-function SearchBar({ mode, setMode, onPick, onPickAuthor }) {
+// A clickable person row (co-author or top citer). Clicking loads that author.
+function PersonRow({ person, onPick, unit }) {
+  return (
+    <button className="card person" onClick={() => onPick(person)}>
+      <div className="card-title">{person.name}</div>
+      <div className="card-tags">
+        <span className="tag score">
+          {person.count} {unit}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+const MODES = [
+  { key: "papers", label: "Papers" },
+  { key: "authors", label: "Authors" },
+  { key: "topics", label: "Topics" },
+];
+
+const PLACEHOLDERS = {
+  papers: "Search a paper by title (or paste a DOI / OpenAlex ID)…",
+  authors: "Search an author by name…",
+  topics: "Search a topic / category (e.g. pharmacokinetics, hERG)…",
+};
+
+// Search box with a Papers/Authors/Topics mode toggle and debounced autocomplete.
+function SearchBar({ mode, setMode, onPick, onPickAuthor, onPickTopic }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -61,7 +87,11 @@ function SearchBar({ mode, setMode, onPick, onPickAuthor }) {
     const t = setTimeout(async () => {
       try {
         const data =
-          mode === "authors" ? await api.searchAuthors(q, 8) : await api.search(q, 8);
+          mode === "authors"
+            ? await api.searchAuthors(q, 8)
+            : mode === "topics"
+            ? await api.searchTopics(q, 8)
+            : await api.search(q, 8);
         if (active) {
           setResults(data.results);
           setOpen(true);
@@ -78,37 +108,28 @@ function SearchBar({ mode, setMode, onPick, onPickAuthor }) {
     };
   }, [q, mode]);
 
-  const isAuthors = mode === "authors";
-
   return (
     <div className="search-wrap">
       <div className="mode-toggle">
-        <button
-          className={!isAuthors ? "active" : ""}
-          onClick={() => setMode("papers")}
-        >
-          Papers
-        </button>
-        <button
-          className={isAuthors ? "active" : ""}
-          onClick={() => setMode("authors")}
-        >
-          Authors
-        </button>
+        {MODES.map((m) => (
+          <button
+            key={m.key}
+            className={mode === m.key ? "active" : ""}
+            onClick={() => setMode(m.key)}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
       <div className="search">
         <input
           value={q}
-          placeholder={
-            isAuthors
-              ? "Search an author by name…"
-              : "Search a paper by title (or paste a DOI / OpenAlex ID)…"
-          }
+          placeholder={PLACEHOLDERS[mode]}
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => results.length && setOpen(true)}
           onKeyDown={(e) => {
             if (
-              !isAuthors &&
+              mode === "papers" &&
               e.key === "Enter" &&
               q.trim().length > 4 &&
               !results.length
@@ -122,42 +143,71 @@ function SearchBar({ mode, setMode, onPick, onPickAuthor }) {
         {loading && <span className="search-spin">…</span>}
         {open && results.length > 0 && (
           <div className="dropdown">
-            {isAuthors
-              ? results.map((a) => (
-                  <div
-                    key={a.id}
-                    className="dropdown-item"
-                    onClick={() => {
-                      onPickAuthor(a);
-                      setOpen(false);
-                      setQ(a.name);
-                    }}
-                  >
-                    <div className="di-title">{a.name}</div>
-                    <div className="di-meta">
-                      {a.institution ? `${a.institution} · ` : ""}
-                      {a.works_count} works · {a.cited_by_count} cites
-                    </div>
+            {mode === "authors" &&
+              results.map((a) => (
+                <div
+                  key={a.id}
+                  className="dropdown-item"
+                  onClick={() => {
+                    onPickAuthor(a);
+                    setOpen(false);
+                    setQ(a.name);
+                  }}
+                >
+                  <div className="di-title">{a.name}</div>
+                  <div className="di-meta">
+                    {a.institution ? `${a.institution} · ` : ""}
+                    {a.works_count} works · {a.cited_by_count} cites
                   </div>
-                ))
-              : results.map((r) => (
-                  <div
-                    key={r.id}
-                    className="dropdown-item"
-                    onClick={() => {
-                      onPick(r.id);
-                      setOpen(false);
-                      setQ(r.title);
-                    }}
-                  >
-                    <div className="di-title">{r.title}</div>
-                    <div className="di-meta">
-                      {authorLine(r.authors)} · {r.year} · {r.cited_by_count} cites
-                    </div>
+                </div>
+              ))}
+            {mode === "topics" &&
+              results.map((t) => (
+                <div
+                  key={t.id}
+                  className="dropdown-item"
+                  onClick={() => {
+                    onPickTopic(t);
+                    setOpen(false);
+                    setQ(t.name);
+                  }}
+                >
+                  <div className="di-title">{t.name}</div>
+                  <div className="di-meta">
+                    {t.field ? `${t.field} · ` : ""}
+                    {t.works_count.toLocaleString()} works
                   </div>
-                ))}
+                </div>
+              ))}
+            {mode === "papers" &&
+              results.map((r) => (
+                <div
+                  key={r.id}
+                  className="dropdown-item"
+                  onClick={() => {
+                    onPick(r.id);
+                    setOpen(false);
+                    setQ(r.title);
+                  }}
+                >
+                  <div className="di-title">{r.title}</div>
+                  <div className="di-meta">
+                    {authorLine(r.authors)} · {r.year} · {r.cited_by_count} cites
+                  </div>
+                </div>
+              ))}
           </div>
         )}
+        {mode === "topics" &&
+          !loading &&
+          q.trim().length >= 3 &&
+          results.length === 0 && (
+            <div className="search-hint">
+              No topic matches. Topics are broad named categories — try full
+              terms (e.g. "drug metabolism", "molecular docking") rather than
+              acronyms like hERG or ADME.
+            </div>
+          )}
       </div>
     </div>
   );
@@ -175,8 +225,14 @@ export default function App() {
 
   // When an author is selected we show their works instead of a paper view.
   const [author, setAuthor] = useState(null);
+  const [authorTab, setAuthorTab] = useState("works"); // works | coauthors | citers
   const [authorList, setAuthorList] = useState({ count: 0, results: [] });
   const [authorLoading, setAuthorLoading] = useState(false);
+
+  // When a topic is selected we show its most-cited papers.
+  const [topic, setTopic] = useState(null);
+  const [topicList, setTopicList] = useState({ count: 0, results: [] });
+  const [topicLoading, setTopicLoading] = useState(false);
 
   // Load focus paper metadata when the id changes.
   useEffect(() => {
@@ -213,25 +269,47 @@ export default function App() {
     };
   }, [focusId, tab]);
 
-  // Load an author's works when one is selected.
+  // Load an author's active sub-tab (their works, co-authors, or top citers).
   useEffect(() => {
     if (!author) return;
     let active = true;
     setAuthorLoading(true);
     setError(null);
-    api
-      .authorWorks(author.id)
+    const fetcher =
+      authorTab === "coauthors"
+        ? api.coauthors(author.id)
+        : authorTab === "citers"
+        ? api.topCiters(author.id)
+        : api.authorWorks(author.id);
+    fetcher
       .then((d) => active && setAuthorList(d))
       .catch((e) => active && setError(e.message))
       .finally(() => active && setAuthorLoading(false));
     return () => {
       active = false;
     };
-  }, [author]);
+  }, [author, authorTab]);
+
+  // Load a topic's most-cited papers when one is selected.
+  useEffect(() => {
+    if (!topic) return;
+    let active = true;
+    setTopicLoading(true);
+    setError(null);
+    api
+      .topicWorks(topic.id)
+      .then((d) => active && setTopicList(d))
+      .catch((e) => active && setError(e.message))
+      .finally(() => active && setTopicLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [topic]);
 
   function pick(id) {
     if (focus) setHistory((h) => [focus, ...h].slice(0, 12));
     setAuthor(null); // leaving author view for a paper
+    setTopic(null);
     setFocusId(id);
     setFocus(null);
     setTab("references");
@@ -240,7 +318,28 @@ export default function App() {
   function pickAuthor(a) {
     setFocusId(null);
     setFocus(null);
-    setAuthor(a);
+    setTopic(null);
+    setAuthorTab("works");
+    setAuthorList({ count: 0, results: [] });
+    // Rows from co-author/citer lists only carry {id, name, count}; fetch the
+    // full record so the header shows institution and totals.
+    if (a.works_count == null) {
+      setAuthor({ ...a, works_count: null, cited_by_count: null });
+      api
+        .author(a.id)
+        .then((full) => setAuthor(full))
+        .catch(() => {});
+    } else {
+      setAuthor(a);
+    }
+  }
+
+  function pickTopic(t) {
+    setFocusId(null);
+    setFocus(null);
+    setAuthor(null);
+    setTopicList({ count: 0, results: [] });
+    setTopic(t);
   }
 
   return (
@@ -249,7 +348,10 @@ export default function App() {
         <div className="brand">
           <div>
             <h1>Citation Explorer</h1>
-            <p>Find related papers through the citation graph — powered by OpenAlex</p>
+            <p>
+              Explore papers, authors, and topics through the citation graph —
+              powered by OpenAlex
+            </p>
           </div>
         </div>
         <SearchBar
@@ -257,6 +359,7 @@ export default function App() {
           setMode={setMode}
           onPick={pick}
           onPickAuthor={pickAuthor}
+          onPickTopic={pickTopic}
         />
       </header>
 
@@ -272,14 +375,16 @@ export default function App() {
         </div>
       )}
 
-      {!focusId && !author && (
+      {!focusId && !author && !topic && (
         <div className="empty">
-          <h2>Start with a paper or an author</h2>
+          <h2>Start with a paper, author, or topic</h2>
           <p>
             Search for a <b>paper</b> to see everything it <b>cites</b>,
             everything that <b>cites it</b>, and papers most often{" "}
-            <b>co-cited</b> alongside it. Or search an <b>author</b> to browse
-            their work. Click any result to pivot and keep exploring.
+            <b>co-cited</b> alongside it. Search an <b>author</b> to browse their
+            work, collaborators, and who cites them. Or search a <b>topic</b> to
+            see its most-cited papers. Click any result to pivot and keep
+            exploring.
           </p>
         </div>
       )}
@@ -290,8 +395,9 @@ export default function App() {
             <h2 className="focus-title">{author.name}</h2>
             <div className="focus-meta">
               {author.institution ? `${author.institution} · ` : ""}
-              {author.works_count} works · {author.cited_by_count} total
-              citations
+              {author.works_count != null
+                ? `${author.works_count} works · ${author.cited_by_count} total citations`
+                : "loading…"}
               {author.orcid && (
                 <>
                   {" · "}
@@ -303,22 +409,105 @@ export default function App() {
             </div>
           </section>
 
+          <nav className="tabs">
+            <button
+              className={authorTab === "works" ? "active" : ""}
+              onClick={() => setAuthorTab("works")}
+            >
+              Papers <small>(most cited)</small>
+            </button>
+            <button
+              className={authorTab === "coauthors" ? "active" : ""}
+              onClick={() => setAuthorTab("coauthors")}
+            >
+              Co-authors <small>(collaborators)</small>
+            </button>
+            <button
+              className={authorTab === "citers" ? "active" : ""}
+              onClick={() => setAuthorTab("citers")}
+            >
+              Cited by <small>(who cites them most)</small>
+            </button>
+          </nav>
+
           <div className="results">
-            <div className="section-label">
-              Papers by this author{" "}
-              {authorList.count ? `(${authorList.count.toLocaleString()})` : ""}
-              , most cited first — click one to explore its citations
-            </div>
+            {authorTab === "works" && (
+              <div className="section-label">
+                Most-cited papers — click one to explore its citations
+              </div>
+            )}
+            {authorTab === "coauthors" && (
+              <div className="section-label">
+                Most frequent collaborators across their work — click to explore
+                that author
+              </div>
+            )}
+            {authorTab === "citers" && (
+              <div className="section-label">
+                Researchers who most cite this author (sampled from their top
+                papers) — click to explore that author
+              </div>
+            )}
             {error && <div className="error">{error}</div>}
             {authorLoading && <div className="loading">Loading…</div>}
             {!authorLoading &&
+              authorTab === "works" &&
               authorList.results.map((p) => (
                 <PaperCard key={p.id} paper={p} onPick={pick} />
               ))}
-            {!authorLoading && authorList.count > authorList.results.length && (
+            {!authorLoading &&
+              authorTab === "coauthors" &&
+              authorList.results.map((person) => (
+                <PersonRow
+                  key={person.id}
+                  person={person}
+                  onPick={pickAuthor}
+                  unit="papers together"
+                />
+              ))}
+            {!authorLoading &&
+              authorTab === "citers" &&
+              authorList.results.map((person) => (
+                <PersonRow
+                  key={person.id}
+                  person={person}
+                  onPick={pickAuthor}
+                  unit="citing papers"
+                />
+              ))}
+            {!authorLoading && authorList.results.length === 0 && (
+              <div className="loading">No results for this view.</div>
+            )}
+          </div>
+        </>
+      )}
+
+      {topic && (
+        <>
+          <section className="focus">
+            <h2 className="focus-title">{topic.name}</h2>
+            <div className="focus-meta">
+              {[topic.field, topic.subfield].filter(Boolean).join(" › ")}
+              {topic.field ? " · " : ""}
+              {topic.works_count.toLocaleString()} works
+            </div>
+          </section>
+
+          <div className="results">
+            <div className="section-label">
+              Most-cited papers in this topic — click one to explore its
+              citations
+            </div>
+            {error && <div className="error">{error}</div>}
+            {topicLoading && <div className="loading">Loading…</div>}
+            {!topicLoading &&
+              topicList.results.map((p) => (
+                <PaperCard key={p.id} paper={p} onPick={pick} />
+              ))}
+            {!topicLoading && topicList.count > topicList.results.length && (
               <div className="more-note">
-                Showing {authorList.results.length} of{" "}
-                {authorList.count.toLocaleString()}.
+                Showing {topicList.results.length} of{" "}
+                {topicList.count.toLocaleString()}.
               </div>
             )}
           </div>

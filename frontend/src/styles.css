@@ -85,6 +85,13 @@ h1 {
   margin-bottom: 4px;
 }
 
+.search-hint {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .search {
   position: relative;
 }
@@ -296,6 +303,20 @@ h1 {
   font-weight: 600;
   line-height: 1.4;
   margin-bottom: 6px;
+}
+
+.card.person {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card.person .card-title {
+  margin-bottom: 0;
+}
+
+.card.person .card-tags {
+  margin-top: 0;
 }
 
 .card-meta {
