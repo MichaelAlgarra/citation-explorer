@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 
 function authorLine(authors) {
@@ -70,12 +70,24 @@ function SearchBar({ mode, setMode, onPick, onPickAuthor, onPickTopic }) {
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const wrapRef = useRef(null);
 
   // Clear results when switching modes so stale hits don't linger.
   useEffect(() => {
     setResults([]);
     setOpen(false);
   }, [mode]);
+
+  // Close the dropdown when clicking anywhere outside the search box.
+  useEffect(() => {
+    function onDocClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
 
   useEffect(() => {
     if (q.trim().length < 3) {
@@ -109,7 +121,7 @@ function SearchBar({ mode, setMode, onPick, onPickAuthor, onPickTopic }) {
   }, [q, mode]);
 
   return (
-    <div className="search-wrap">
+    <div className="search-wrap" ref={wrapRef}>
       <div className="mode-toggle">
         {MODES.map((m) => (
           <button
