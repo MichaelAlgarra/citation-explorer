@@ -1,5 +1,7 @@
 # Citation Explorer
 
+**Live:** https://michaelalgarra.github.io/citation-explorer/
+
 A central hub for finding papers related to each other through the citation
 graph. Search for any paper and instantly see:
 
@@ -54,15 +56,36 @@ Then open http://localhost:5199. That's it — no backend needed.
 
 ## Deploying to GitHub Pages
 
-A workflow at `.github/workflows/deploy.yml` builds and deploys automatically:
+This project deploys by publishing the built site to a `gh-pages` branch. To
+release a new version:
 
-1. Create a GitHub repo and push this project.
-2. In the repo: **Settings → Pages → Build and deployment → Source →
-   GitHub Actions**.
-3. Push to `main`. The action builds `frontend/` (setting Vite's `base` to
-   your repo name) and publishes it.
+```bash
+# 1. push source
+git push origin main
 
-Your site lands at `https://<username>.github.io/<repo>/`.
+# 2. build with the Pages base path (your repo name)
+VITE_BASE=/citation-explorer/ npm run build --prefix frontend
+touch frontend/dist/.nojekyll
+
+# 3. publish dist/ to the gh-pages branch
+cd frontend/dist
+git init -q && git checkout -q -b gh-pages
+git add -A && git commit -q -m "Deploy"
+git push -f https://github.com/<username>/citation-explorer.git gh-pages:gh-pages
+rm -rf .git
+```
+
+Then set **Settings → Pages → Source → Deploy from a branch → `gh-pages` /
+(root)** (one-time). Your site lands at
+`https://<username>.github.io/citation-explorer/`.
+
+> **Why not GitHub Actions?** An Actions workflow (`build → deploy-pages`) is
+> the cleaner approach, but it requires a token/permission that can push
+> `.github/workflows/*`. If yours can, add that workflow and switch the Pages
+> source to "GitHub Actions" for automatic deploys on push.
+
+> **`VITE_BASE`** must match your repo name (e.g. `/citation-explorer/`) so
+> assets resolve under the Pages subpath; it defaults to `/` for local dev.
 
 > Because the OpenAlex `mailto` ships in client code, it's set to a generic
 > support address in `src/api.js`. Change it if you like, but don't use a
