@@ -64,8 +64,112 @@ const PLACEHOLDERS = {
   topics: "Search a topic / category (e.g. pharmacokinetics, hERG)…",
 };
 
+// OpenAlex work types worth surfacing for research scouting.
+const WORK_TYPES = [
+  { value: "", label: "Any type" },
+  { value: "article", label: "Article" },
+  { value: "review", label: "Review" },
+  { value: "preprint", label: "Preprint" },
+  { value: "book-chapter", label: "Book chapter" },
+  { value: "dataset", label: "Dataset" },
+];
+
+const SORTS = [
+  { value: "relevance", label: "Relevance" },
+  { value: "cited", label: "Most cited" },
+  { value: "newest", label: "Newest" },
+];
+
+const EMPTY_FILTERS = {
+  fromYear: "",
+  toYear: "",
+  type: "",
+  minCitations: "",
+  sort: "relevance",
+};
+
+// Normalize the raw form state into the numeric shape api.js expects.
+function normalizeFilters(f) {
+  return {
+    fromYear: f.fromYear ? Number(f.fromYear) : null,
+    toYear: f.toYear ? Number(f.toYear) : null,
+    type: f.type || null,
+    minCitations: f.minCitations ? Number(f.minCitations) : null,
+    sort: f.sort,
+  };
+}
+
+// A compact row of paper filters: year range, type, min citations, sort.
+// Applies to paper search, an author's papers, and a topic's papers.
+function FilterBar({ filters, setFilters }) {
+  const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
+  const dirty =
+    filters.fromYear ||
+    filters.toYear ||
+    filters.type ||
+    filters.minCitations ||
+    filters.sort !== "relevance";
+  return (
+    <div className="filters">
+      <div className="filter year">
+        <label>Year</label>
+        <input
+          type="number"
+          inputMode="numeric"
+          placeholder="from"
+          value={filters.fromYear}
+          onChange={set("fromYear")}
+        />
+        <span className="dash">–</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          placeholder="to"
+          value={filters.toYear}
+          onChange={set("toYear")}
+        />
+      </div>
+      <div className="filter">
+        <label>Type</label>
+        <select value={filters.type} onChange={set("type")}>
+          {WORK_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="filter">
+        <label>Min cites</label>
+        <input
+          type="number"
+          inputMode="numeric"
+          placeholder="0"
+          value={filters.minCitations}
+          onChange={set("minCitations")}
+        />
+      </div>
+      <div className="filter">
+        <label>Sort</label>
+        <select value={filters.sort} onChange={set("sort")}>
+          {SORTS.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {dirty && (
+        <button className="filter-clear" onClick={() => setFilters(EMPTY_FILTERS)}>
+          Clear
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Search box with a Papers/Authors/Topics mode toggle and debounced autocomplete.
-function SearchBar({ mode, setMode, onPick, onPickAuthor, onPickTopic }) {
+function SearchBar({ mode, setMode, onPick, onPickAuthor, onPickTopic, filters }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -103,7 +207,7 @@ function SearchBar({ mode, setMode, onPick, onPickAuthor, onPickTopic }) {
             ? await api.searchAuthors(q, 8)
             : mode === "topics"
             ? await api.searchTopics(q, 8)
-            : await api.search(q, 8);
+            : await api.search(q, 8, normalizeFilters(filters));
         if (active) {
           setResults(data.results);
           setOpen(true);
@@ -118,7 +222,7 @@ function SearchBar({ mode, setMode, onPick, onPickAuthor, onPickTopic }) {
       active = false;
       clearTimeout(t);
     };
-  }, [q, mode]);
+  }, [q, mode, filters]);
 
   return (
     <div className="search-wrap" ref={wrapRef}>
@@ -234,6 +338,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
+  // Shared paper filters: apply to paper search, author papers, topic papers.
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
 
   // When an author is selected we show their works instead of a paper view.
   const [author, setAuthor] = useState(null);
@@ -292,7 +398,7 @@ export default function App() {
         ? api.coauthors(author.id)
         : authorTab === "citers"
         ? api.topCiters(author.id)
-        : api.authorWorks(author.id);
+        : api.authorWorks(author.id, 50, normalizeFilters(filters));
     fetcher
       .then((d) => active && setAuthorList(d))
       .catch((e) => active && setError(e.message))
@@ -300,7 +406,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [author, authorTab]);
+  }, [author, authorTab, filters]);
 
   // Load a topic's most-cited papers when one is selected.
   useEffect(() => {
@@ -309,14 +415,14 @@ export default function App() {
     setTopicLoading(true);
     setError(null);
     api
-      .topicWorks(topic.id)
+      .topicWorks(topic.id, 50, normalizeFilters(filters))
       .then((d) => active && setTopicList(d))
       .catch((e) => active && setError(e.message))
       .finally(() => active && setTopicLoading(false));
     return () => {
       active = false;
     };
-  }, [topic]);
+  }, [topic, filters]);
 
   function pick(id) {
     if (focus) setHistory((h) => [focus, ...h].slice(0, 12));
@@ -372,7 +478,11 @@ export default function App() {
           onPick={pick}
           onPickAuthor={pickAuthor}
           onPickTopic={pickTopic}
+          filters={filters}
         />
+        {(mode === "papers" || author || topic) && (
+          <FilterBar filters={filters} setFilters={setFilters} />
+        )}
       </header>
 
       {history.length > 0 && (

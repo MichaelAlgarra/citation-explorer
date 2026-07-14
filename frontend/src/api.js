@@ -105,6 +105,36 @@ async function listWorks(params) {
   };
 }
 
+// Translate the UI filter state into OpenAlex /works filter clauses.
+// { fromYear, toYear, type, minCitations } -> ["from_publication_date:…", …]
+function filterClauses(f = {}) {
+  const clauses = [];
+  if (f.fromYear) clauses.push(`from_publication_date:${f.fromYear}-01-01`);
+  if (f.toYear) clauses.push(`to_publication_date:${f.toYear}-12-31`);
+  if (f.type) clauses.push(`type:${f.type}`);
+  // OpenAlex `>N` is strictly greater, so subtract 1 for an inclusive minimum.
+  if (f.minCitations) clauses.push(`cited_by_count:>${Math.max(0, f.minCitations - 1)}`);
+  return clauses;
+}
+
+// Combine a required base filter (e.g. author.id:X) with the UI filters.
+function mergeFilter(base, f) {
+  return [base, ...filterClauses(f)].filter(Boolean).join(",");
+}
+
+// Sort for keyword search, where OpenAlex's default (and best) is relevance.
+function searchSort(f = {}) {
+  if (f.sort === "cited") return "cited_by_count:desc";
+  if (f.sort === "newest") return "publication_date:desc";
+  return null; // relevance — let OpenAlex default apply
+}
+
+// Sort for listings without a search term (author/topic works). Relevance is
+// invalid there, so a missing/relevance choice falls back to most-cited.
+function listSort(f = {}) {
+  return f.sort === "newest" ? "publication_date:desc" : "cited_by_count:desc";
+}
+
 // Co-citation neighbors: papers most often cited alongside this one. We take
 // the top citing papers, pull each of their reference lists, and count which
 // works recur most. Mirrors the old backend /related endpoint.
@@ -199,9 +229,15 @@ async function topCiters(id, limit = 15) {
 }
 
 export const api = {
-  search: async (q, limit = 10) => ({
-    results: (await listWorks({ search: q, per_page: limit })).results,
-  }),
+  search: async (q, limit = 10, filters = {}) => {
+    const params = { search: q, per_page: limit };
+    const filter = filterClauses(filters).join(",");
+    if (filter) params.filter = filter;
+    const sort = searchSort(filters);
+    if (sort) params.sort = sort;
+    const { count, results } = await listWorks(params);
+    return { count, results };
+  },
   searchAuthors: async (q, limit = 10) => {
     const data = await getJSON("/authors", {
       search: q,
@@ -216,10 +252,10 @@ export const api = {
     });
     return simplifyAuthor(data);
   },
-  authorWorks: (id, perPage = 50) =>
+  authorWorks: (id, perPage = 50, filters = {}) =>
     listWorks({
-      filter: `author.id:${shortId(id)}`,
-      sort: "cited_by_count:desc",
+      filter: mergeFilter(`author.id:${shortId(id)}`, filters),
+      sort: listSort(filters),
       per_page: perPage,
     }),
   work: async (id) => {
@@ -245,10 +281,10 @@ export const api = {
     });
     return { results: (data.results || []).map(simplifyTopic) };
   },
-  topicWorks: (id, perPage = 50) =>
+  topicWorks: (id, perPage = 50, filters = {}) =>
     listWorks({
-      filter: `topics.id:${shortId(id)}`,
-      sort: "cited_by_count:desc",
+      filter: mergeFilter(`topics.id:${shortId(id)}`, filters),
+      sort: listSort(filters),
       per_page: perPage,
     }),
 };

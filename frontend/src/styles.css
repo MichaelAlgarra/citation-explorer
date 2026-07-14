@@ -157,6 +157,88 @@ h1 {
   color: var(--muted);
 }
 
+/* --- filters --- */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter.year {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter.year label {
+  align-self: center;
+}
+
+.filter.year .dash {
+  color: var(--muted);
+}
+
+.filter input,
+.filter select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 9px;
+  font-size: 13px;
+  outline: none;
+}
+
+.filter input {
+  width: 72px;
+}
+
+.filter input:focus,
+.filter select:focus {
+  border-color: var(--accent);
+}
+
+/* Hide the number-input spinners for a cleaner look. */
+.filter input[type="number"]::-webkit-outer-spin-button,
+.filter input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.filter input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.filter-clear {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  height: 33px;
+}
+
+.filter-clear:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 /* --- breadcrumbs --- */
 .breadcrumbs {
   display: flex;
